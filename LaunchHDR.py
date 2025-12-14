@@ -11,7 +11,7 @@ CYAN = "\033[96m"
 YELLOW = "\033[93m"
 RESET = "\033[0m"
 
-# Enable colors in Windows CMD
+# Enable colors
 os.system('')
 
 def is_frozen():

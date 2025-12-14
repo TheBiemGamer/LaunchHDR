@@ -34,9 +34,6 @@ If you prefer to type it yourself, the syntax for Steam Launch Options is:
 
 > `"C:\GamingTools\LaunchHDR.exe" "34M2C6500" %command%`
 
-
-Here is an improved, clearer version of that section. I added the prerequisite check (since `build.bat` will fail if they don't have PyInstaller) and formatted it to look more professional.
-
 ## Building from Source
 
 You can audit the full source code in [`LaunchHDR.py`](./LaunchHDR.py) and compile it yourself using the included build script.

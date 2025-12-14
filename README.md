@@ -6,7 +6,7 @@ Designed for use with **Steam Launch Options**, this tool eliminates the need to
 
 ## Installation
 
-1.  Go to the **[suspicious link removed]** page.
+1.  Go to the **[Releases](https://github.com/TheBiemGamer/LaunchHDR/releases)** page.
 2.  Download the latest `.exe` file.
 3.  Save it to a permanent folder (e.g., `C:\GamingTools\`).
 

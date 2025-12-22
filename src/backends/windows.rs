@@ -65,8 +65,6 @@ impl HdrBackend for WindowsBackend {
 }
 
 // --- Low Level Win32 Helpers ---
-// (Keep the existing query_display_config, get_monitor_name, set_hdr_state functions here exactly as before)
-// ...
 fn query_display_config() -> Result<Vec<DISPLAYCONFIG_PATH_INFO>> {
     let mut num_paths = 0;
     let mut num_modes = 0;

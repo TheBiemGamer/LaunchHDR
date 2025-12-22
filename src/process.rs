@@ -43,10 +43,46 @@ pub fn is_process_running(target_name: &str) -> bool {
     false
 }
 
+#[cfg(windows)]
+pub fn get_running_processes_list() -> Vec<String> {
+    let mut list = Vec::new();
+    unsafe {
+        if let Ok(snapshot) = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) {
+            let mut entry = PROCESSENTRY32W::default();
+            entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+
+            if Process32FirstW(snapshot, &mut entry).is_ok() {
+                loop {
+                    let name_slice = &entry.szExeFile;
+                    let len = name_slice.iter().position(|&c| c == 0).unwrap_or(name_slice.len());
+                    let process_name = String::from_utf16_lossy(&name_slice[0..len]);
+                    
+                    if !process_name.is_empty() {
+                        list.push(process_name);
+                    }
+
+                    if Process32NextW(snapshot, &mut entry).is_err() {
+                        break;
+                    }
+                }
+            }
+            let _ = CloseHandle(snapshot);
+        }
+    }
+    list.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+    list.dedup();
+    list
+}
+
 #[cfg(not(windows))]
 pub fn is_process_running(_target_name: &str) -> bool {
     // Linux implementation placeholder
     false 
+}
+
+#[cfg(not(windows))]
+pub fn get_running_processes_list() -> Vec<String> {
+    Vec::new()
 }
 
 /// Waits for a process to START, then waits for it to STOP.

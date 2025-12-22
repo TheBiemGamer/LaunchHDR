@@ -2,14 +2,16 @@ use eframe::egui;
 use std::env;
 use std::fs;
 use std::path::Path;
+use std::process::Command;
 use arboard::Clipboard;
 use rfd::FileDialog;
 use crate::backends::get_backend;
+use crate::process;
 
 pub fn run() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([450.0, 550.0])
+            .with_inner_size([450.0, 600.0])
             .with_resizable(false),
         ..Default::default()
     };
@@ -43,6 +45,11 @@ struct MyApp {
     // Epic Tab
     target_exe: String,
     selected_game_path: Option<String>,
+
+    // Process Picker
+    show_process_picker: bool,
+    process_list: Vec<String>,
+    process_filter: String,
 }
 
 impl MyApp {
@@ -65,7 +72,26 @@ impl MyApp {
             generated_cmd: String::new(),
             target_exe: "Game_Original.exe".to_string(),
             selected_game_path: None,
+            show_process_picker: false,
+            process_list: Vec::new(),
+            process_filter: String::new(),
         }
+    }
+
+    // --- UTILS ---
+    #[allow(dead_code)] // Intentionally unused for now, logic inline in update
+    fn toggle_test_hdr(&mut self) {
+        // Logic moved inline to update loop to avoid borrowing issues or simplify
+    }
+    
+    fn refresh_process_list(&mut self) {
+        self.process_list = process::get_running_processes_list();
+    }
+
+    fn open_windows_settings(&self) {
+        let _ = Command::new("cmd")
+            .args(&["/C", "start", "ms-settings:display-advanced"])
+            .spawn();
     }
 
     // --- STEAM LOGIC ---
@@ -115,16 +141,12 @@ impl MyApp {
         }
     }
     
-    // Checks if the wrapper seems to be installed at the selected path
     fn check_is_installed(&self) -> bool {
         if let Some(path_str) = &self.selected_game_path {
             let path = Path::new(path_str);
             if let Some(parent) = path.parent() {
                 let config_path = parent.join("hdr_config.ini");
                 let target_path = parent.join(&self.target_exe);
-                
-                // If config exists AND target (Game_Original.exe) exists, it's likely installed.
-                // Note: 'path' here is 'Game.exe' (the wrapper)
                 return config_path.exists() && target_path.exists();
             }
         }
@@ -165,33 +187,22 @@ impl MyApp {
 
         let new_target_path = game_dir.join(target_exe_name);
 
-        // 1. Rename Original Game Exe -> Target Name (e.g. Game.exe -> Game_Original.exe)
-        // Only do this if the new target doesn't exist yet (safety)
         if !new_target_path.exists() {
              if let Err(e) = fs::rename(game_path, &new_target_path) {
                 self.status_msg = format!("Error renaming game exe: {}", e);
                 return;
              }
         } else {
-             // If it exists, we assume maybe the user already renamed it or ran this before.
-             // We should check if 'game_path' (Game.exe) still exists. 
-             // If Game.exe exists AND Game_Original.exe exists, it's ambiguous. 
-             // But if we are installing, we assume we want to replace Game.exe.
-             
-             // If Game.exe is MISSING, maybe we already installed?
              if !game_path.exists() {
-                 // Proceed to copy launcher
              } else {
                  self.status_msg = format!("Error: Target '{}' already exists. Rename manually or delete it.", target_exe_name);
                  return;
              }
         }
 
-        // 2. Copy Self -> Game Path (e.g. LaunchHDR.exe -> Game.exe)
         if let Ok(current_exe) = env::current_exe() {
             if let Err(e) = fs::copy(&current_exe, game_path) {
                 self.status_msg = format!("Error copying launcher: {}", e);
-                // Try to revert rename? 
                 let _ = fs::rename(&new_target_path, game_path);
                 return;
             }
@@ -200,7 +211,6 @@ impl MyApp {
              return;
         }
 
-        // 3. Create INI
         let wait = self.wait_process.trim();
         let content = format!(
             "monitor={}\ntarget={}\nwait={}",
@@ -226,13 +236,11 @@ impl MyApp {
             None => return,
         };
 
-        // 1. Remove INI
         let ini_path = game_dir.join("hdr_config.ini");
         if ini_path.exists() {
             let _ = fs::remove_file(ini_path);
         }
 
-        // 2. Remove Wrapper (LaunchHDR renamed as Game.exe)
         if game_path.exists() {
              if let Err(e) = fs::remove_file(game_path) {
                  self.status_msg = format!("Error removing wrapper: {}", e);
@@ -240,7 +248,6 @@ impl MyApp {
              }
         }
 
-        // 3. Rename Original Back (Game_Original.exe -> Game.exe)
         let target_path = game_dir.join(&self.target_exe);
         if target_path.exists() {
             if let Err(e) = fs::rename(&target_path, game_path) {
@@ -256,8 +263,60 @@ impl MyApp {
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // PROCESS PICKER WINDOW
+        // Fix: Use a local variable to control open state to avoid double borrow of self
+        let mut show_picker = self.show_process_picker;
+        
+        if show_picker {
+             // We need to clone the data needed inside the closure so we don't borrow self
+             let process_list = self.process_list.clone();
+             let mut filter = self.process_filter.clone();
+             let mut selected_process: Option<String> = None;
+
+             egui::Window::new("Select Running Process")
+                .open(&mut show_picker)
+                .collapsible(false)
+                .resizable(false)
+                .default_width(300.0)
+                .show(ctx, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Filter:");
+                        ui.text_edit_singleline(&mut filter);
+                    });
+                    ui.separator();
+                    
+                    egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
+                        let filter_lower = filter.to_lowercase();
+                        for proc in &process_list {
+                             if filter_lower.is_empty() || proc.to_lowercase().contains(&filter_lower) {
+                                  if ui.button(proc).clicked() {
+                                      selected_process = Some(proc.clone());
+                                  }
+                             }
+                        }
+                    });
+                });
+            
+            // Sync back changes
+            self.process_filter = filter;
+            
+            if let Some(proc) = selected_process {
+                self.wait_process = proc;
+                self.show_process_picker = false;
+            } else {
+                self.show_process_picker = show_picker;
+            }
+        }
+
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("HDR Launcher Setup");
+            
+            // SYSTEM SETTINGS LINK
+            ui.with_layout(egui::Layout::top_down(egui::Align::RIGHT), |ui| {
+                 if ui.link("⚙ Windows HDR Settings").clicked() {
+                     self.open_windows_settings();
+                 }
+            });
             ui.add_space(5.0);
 
             // --- TABS ---
@@ -270,22 +329,41 @@ impl eframe::App for MyApp {
 
             // --- COMMON: MONITOR SELECT ---
             ui.label("1. Select HDR Monitor:");
-            let selected_text = self.selected_monitor.as_deref().unwrap_or("No monitors found");
-            egui::ComboBox::from_id_salt("monitor_combo")
-                .selected_text(selected_text)
-                .show_ui(ui, |ui| {
-                    for monitor in &self.monitors {
-                        ui.selectable_value(&mut self.selected_monitor, Some(monitor.clone()), monitor);
+            ui.horizontal(|ui| {
+                let selected_text = self.selected_monitor.as_deref().unwrap_or("No monitors found");
+                egui::ComboBox::from_id_salt("monitor_combo")
+                    .selected_text(selected_text)
+                    .width(250.0)
+                    .show_ui(ui, |ui| {
+                        for monitor in &self.monitors {
+                            ui.selectable_value(&mut self.selected_monitor, Some(monitor.clone()), monitor);
+                        }
+                    });
+                
+                if ui.button("Refresh").clicked() {
+                    let backend = get_backend();
+                    if let Ok(new_list) = backend.get_monitors() {
+                        self.monitors = new_list;
+                        if !self.monitors.is_empty() { self.selected_monitor = Some(self.monitors[0].clone()); }
                     }
-                });
-            
-            if ui.button("Refresh Monitors").clicked() {
-                let backend = get_backend();
-                if let Ok(new_list) = backend.get_monitors() {
-                    self.monitors = new_list;
-                    if !self.monitors.is_empty() { self.selected_monitor = Some(self.monitors[0].clone()); }
                 }
-            }
+            });
+            
+            // TEST HDR ROW
+            ui.horizontal(|ui| {
+                ui.label("Test HDR:");
+                if ui.button("ON").clicked() {
+                     if let Some(m) = &self.selected_monitor {
+                         let _ = get_backend().toggle_hdr(m, true);
+                     }
+                }
+                if ui.button("OFF").clicked() {
+                     if let Some(m) = &self.selected_monitor {
+                         let _ = get_backend().toggle_hdr(m, false);
+                     }
+                }
+            });
+
             ui.add_space(10.0);
 
             match self.current_tab {
@@ -294,6 +372,10 @@ impl eframe::App for MyApp {
                     ui.horizontal(|ui| {
                         ui.label("Wait Process:");
                         ui.text_edit_singleline(&mut self.wait_process).on_hover_text("e.g. witcher3.exe");
+                        if ui.button("🔍").on_hover_text("Pick from running processes").clicked() {
+                             self.refresh_process_list();
+                             self.show_process_picker = true;
+                        }
                     });
 
                     ui.add_space(15.0);
@@ -329,7 +411,13 @@ impl eframe::App for MyApp {
                     ui.text_edit_singleline(&mut self.target_exe).on_hover_text("The original game executable will be renamed to this.");
                     
                     ui.label("Wait Process (Optional):");
-                    ui.text_edit_singleline(&mut self.wait_process).on_hover_text("If the game uses a launcher that closes, put the actual game exe name here.");
+                    ui.horizontal(|ui| {
+                        ui.text_edit_singleline(&mut self.wait_process).on_hover_text("If the game uses a launcher that closes, put the actual game exe name here.");
+                        if ui.button("🔍").on_hover_text("Pick from running processes").clicked() {
+                             self.refresh_process_list();
+                             self.show_process_picker = true;
+                        }
+                    });
 
                     ui.add_space(15.0);
                     ui.separator();

@@ -113,7 +113,7 @@ fn run_wrapper_session(config: WrapperConfig) -> anyhow::Result<()> {
     // Pass ALL arguments received by this process to the target game
     // skip(1) removes the executable path itself
     let args: Vec<String> = env::args().skip(1).collect();
-    let args_slices: Vec<&String> = args.iter().collect(); // Convert to format needed by run_session logic
+    let _args_slices: Vec<&String> = args.iter().collect(); // Convert to format needed by run_session logic
 
     // Convert Vec<&String> to &[&String] is tricky, so we just reconstruct logic here roughly
     // simpler to just call the shared logic
@@ -130,7 +130,7 @@ fn run_wrapper_session(config: WrapperConfig) -> anyhow::Result<()> {
     // Launch Target
     println!("Launching target: {} with args: {:?}", config.target, args);
     
-    let mut child = Command::new(&config.target)
+    let child = Command::new(&config.target)
         .args(&args)
         .spawn();
 

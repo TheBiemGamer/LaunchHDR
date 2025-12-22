@@ -119,7 +119,12 @@ impl MyApp {
                              *status.lock().unwrap() = msg;
                         },
                         Err(e) => {
-                             *status.lock().unwrap() = format!("Update failed: {}", e);
+                             let e_str = e.to_string();
+                             if e_str.contains("os error 5") || e_str.contains("Access is denied") {
+                                 *status.lock().unwrap() = "Update failed: Access Denied. Run as Admin.".to_string();
+                             } else {
+                                 *status.lock().unwrap() = format!("Update failed: {}", e);
+                             }
                         }
                      }
                 },
@@ -410,6 +415,8 @@ impl eframe::App for MyApp {
             if !update_msg.is_empty() {
                  if is_checking {
                      ui.colored_label(egui::Color32::from_rgb(255, 165, 0), &update_msg); // Orange for checking
+                 } else if update_msg.contains("failed") || update_msg.contains("error") || update_msg.contains("Access Denied") {
+                     ui.colored_label(egui::Color32::RED, &update_msg);
                  } else {
                      ui.colored_label(egui::Color32::LIGHT_BLUE, &update_msg);
                  }

@@ -44,13 +44,17 @@ jobs:
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" setup.iss
 
+      - name: Prepare Update Artifact
+        run: |
+          Copy-Item "target/release/LaunchHDR.exe" -Destination "target/release/LaunchHDR-x86_64-pc-windows-msvc.exe"
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ steps.get_version.outputs.VERSION }}
           name: LaunchHDR v${{ steps.get_version.outputs.VERSION }}
           files: |
-            target/release/LaunchHDR.exe
+            target/release/LaunchHDR-x86_64-pc-windows-msvc.exe
             LaunchHDR_Setup.exe
           draft: false
           prerelease: false

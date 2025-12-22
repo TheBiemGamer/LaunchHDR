@@ -3,21 +3,26 @@ use std::env;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
+use std::sync::{Arc, Mutex};
+use std::thread;
 use arboard::Clipboard;
 use rfd::FileDialog;
 use crate::backends::get_backend;
 use crate::process;
 
+const REPO_OWNER: &str = "TheBiemGamer";
+const REPO_NAME: &str = "LaunchHDR";
+
 pub fn run() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([450.0, 600.0])
+            .with_inner_size([450.0, 650.0])
             .with_resizable(false),
         ..Default::default()
     };
     
     eframe::run_native(
-        "Steam HDR Launcher",
+        "HDR Launcher",
         options,
         Box::new(|cc| Ok(Box::new(MyApp::new(cc)))),
     )
@@ -38,7 +43,12 @@ struct MyApp {
 
     // State
     current_tab: Tab,
+    show_about: bool,
     
+    // Update
+    update_status: Arc<Mutex<String>>,
+    is_checking_update: Arc<Mutex<bool>>,
+
     // Steam Tab
     generated_cmd: String,
 
@@ -69,6 +79,9 @@ impl MyApp {
             wait_process: String::new(),
             status_msg: String::new(),
             current_tab: Tab::Steam,
+            show_about: false,
+            update_status: Arc::new(Mutex::new(String::new())),
+            is_checking_update: Arc::new(Mutex::new(false)),
             generated_cmd: String::new(),
             target_exe: "Game_Original.exe".to_string(),
             selected_game_path: None,
@@ -78,12 +91,47 @@ impl MyApp {
         }
     }
 
-    // --- UTILS ---
-    #[allow(dead_code)] // Intentionally unused for now, logic inline in update
-    fn toggle_test_hdr(&mut self) {
-        // Logic moved inline to update loop to avoid borrowing issues or simplify
+    fn check_for_updates(&self) {
+        let status = self.update_status.clone();
+        let is_checking = self.is_checking_update.clone();
+
+        *status.lock().unwrap() = "Checking for updates...".to_string();
+        *is_checking.lock().unwrap() = true;
+
+        thread::spawn(move || {
+            let result = self_update::backends::github::Update::configure()
+                .repo_owner(REPO_OWNER)
+                .repo_name(REPO_NAME)
+                .bin_name("LaunchHDR")
+                .show_download_progress(true)
+                .current_version(env!("CARGO_PKG_VERSION"))
+                .build();
+
+            match result {
+                Ok(updater) => {
+                     match updater.update() {
+                        Ok(status_update) => {
+                            let msg = if status_update.updated() {
+                                format!("Updated to version {}!", status_update.version())
+                            } else {
+                                "Already up to date.".to_string()
+                            };
+                             *status.lock().unwrap() = msg;
+                        },
+                        Err(e) => {
+                             *status.lock().unwrap() = format!("Update failed: {}", e);
+                        }
+                     }
+                },
+                Err(e) => {
+                    *status.lock().unwrap() = format!("Config failed: {}", e);
+                }
+            }
+            *is_checking.lock().unwrap() = false;
+        });
     }
-    
+
+    // --- UTILS ---
     fn refresh_process_list(&mut self) {
         self.process_list = process::get_running_processes_list();
     }
@@ -263,12 +311,57 @@ impl MyApp {
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // --- TOP MENU BAR ---
+        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
+            egui::menu::bar(ui, |ui| {
+                ui.menu_button("File", |ui| {
+                    if ui.button("Exit").clicked() {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    }
+                });
+                
+                let is_checking = *self.is_checking_update.lock().unwrap();
+                if ui.add_enabled(!is_checking, egui::Button::new("Check for Updates")).clicked() {
+                    self.check_for_updates();
+                }
+
+                if ui.button("About").clicked() {
+                    self.show_about = true;
+                }
+            });
+        });
+
+        // --- ABOUT DIALOG ---
+        let mut open_about = self.show_about;
+        if open_about {
+             egui::Window::new("About LaunchHDR")
+                .open(&mut open_about)
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .show(ctx, |ui| {
+                    ui.heading("LaunchHDR");
+                    ui.label(format!("Version: {}", env!("CARGO_PKG_VERSION")));
+                    ui.label(format!("Compiled: {}", env!("COMPILE_DATE")));
+                    ui.add_space(5.0);
+                    ui.label("A utility to automatically toggle HDR for games on launch and exit. Supports Steam, Epic Games, and standalone executables.");
+                    ui.add_space(10.0);
+                    ui.label("MIT License");
+                    ui.label("Copyright (c) 2025 TheBiemGamer");
+                    ui.separator();
+                    egui::ScrollArea::vertical().max_height(100.0).show(ui, |ui| {
+                         let license_text = include_str!("../LICENSE")
+                            .replace("MIT License", "")
+                            .replace("Copyright (c) 2025 TheBiemGamer", "");
+                         ui.label(license_text.trim());
+                    });
+                });
+             self.show_about = open_about;
+        }
+
         // PROCESS PICKER WINDOW
-        // Fix: Use a local variable to control open state to avoid double borrow of self
         let mut show_picker = self.show_process_picker;
-        
         if show_picker {
-             // We need to clone the data needed inside the closure so we don't borrow self
              let process_list = self.process_list.clone();
              let mut filter = self.process_filter.clone();
              let mut selected_process: Option<String> = None;
@@ -285,21 +378,22 @@ impl eframe::App for MyApp {
                     });
                     ui.separator();
                     
-                    egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
-                        let filter_lower = filter.to_lowercase();
-                        for proc in &process_list {
-                             if filter_lower.is_empty() || proc.to_lowercase().contains(&filter_lower) {
-                                  if ui.button(proc).clicked() {
-                                      selected_process = Some(proc.clone());
+                    egui::ScrollArea::vertical()
+                        .max_height(300.0)
+                        .auto_shrink([false, true])
+                        .show(ui, |ui| {
+                             let filter_lower = filter.to_lowercase();
+                             for proc in &process_list {
+                                  if proc == "[System Process]" { continue; }
+                                  if filter_lower.is_empty() || proc.to_lowercase().contains(&filter_lower) {
+                                       if ui.button(proc).clicked() {
+                                           selected_process = Some(proc.clone());
+                                       }
                                   }
                              }
-                        }
-                    });
+                        });
                 });
-            
-            // Sync back changes
             self.process_filter = filter;
-            
             if let Some(proc) = selected_process {
                 self.wait_process = proc;
                 self.show_process_picker = false;
@@ -309,6 +403,19 @@ impl eframe::App for MyApp {
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
+            // Update Status Display
+            let update_msg = self.update_status.lock().unwrap().clone();
+            let is_checking = *self.is_checking_update.lock().unwrap();
+            
+            if !update_msg.is_empty() {
+                 if is_checking {
+                     ui.colored_label(egui::Color32::from_rgb(255, 165, 0), &update_msg); // Orange for checking
+                 } else {
+                     ui.colored_label(egui::Color32::LIGHT_BLUE, &update_msg);
+                 }
+                 ui.separator();
+            }
+
             ui.heading("HDR Launcher Setup");
             
             // SYSTEM SETTINGS LINK

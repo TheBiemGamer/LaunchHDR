@@ -1,0 +1,58 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Get version from Cargo.toml
+        id: get_version
+        shell: powershell
+        run: |
+          $content = Get-Content Cargo.toml -Raw
+          if ($content -match 'version\s*=\s*"(.*?)"') {
+            $version = $matches[1]
+            echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+            Write-Host "Detected version: $version"
+          } else {
+            Write-Error "Could not find version in Cargo.toml"
+            exit 1
+          }
+
+      - name: Build Release Binary
+        run: cargo build --release --verbose
+
+      - name: Install Inno Setup
+        run: |
+          choco install innosetup
+
+      - name: Build Installer
+        shell: powershell
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" setup.iss
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.get_version.outputs.VERSION }}
+          name: LaunchHDR v${{ steps.get_version.outputs.VERSION }}
+          files: |
+            target/release/LaunchHDR.exe
+            LaunchHDR_Setup.exe
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,71 +1,59 @@
-# Steam HDR Launcher
+# LaunchHDR
 
-A simple tool that automatically toggles HDR **ON** when you launch a game and **OFF** when you close it.
+**LaunchHDR** is a lightweight, native utility designed to automatically toggle **Windows HDR** ON when you launch a game and OFF when you close it. 
 
-Designed for use with **Steam Launch Options**, this tool eliminates the need to manually toggle Windows settings before playing HDR-supported games.
+It supports **Steam** (via Launch Options) and **Epic Games/GOG/Standalone** titles (via a Wrapper mode), providing a "set and forget" HDR experience.
+
+![License](https://img.shields.io/github/license/TheBiemGamer/LaunchHDR)
+![Version](https://img.shields.io/github/v/release/TheBiemGamer/LaunchHDR)
 
 ## Installation
 
-1.  Go to the **[Releases](https://github.com/TheBiemGamer/LaunchHDR/releases)** page.
-2.  Download the latest `.exe` file.
-3.  Save it to a permanent folder (e.g., `C:\GamingTools\`).
+1.  Download the latest installer (`LaunchHDR_Setup.exe`) from the [**Releases Page**](https://github.com/TheBiemGamer/LaunchHDR/releases).
+2.  Run the installer.
+3.  Launch **LaunchHDR** from your Start Menu or Desktop.
 
-## How to Use
+## Usage
 
-### Method 1: The Easy Way (Setup Wizard)
+### 1. Steam Games
+For games launched via Steam:
 
-The tool includes a built-in wizard that writes the launch code for you.
+1.  Open **LaunchHDR**.
+2.  Select your **HDR Monitor** from the dropdown.
+3.  (Optional) If the game uses a launcher (e.g., Cyberpunk 2077, Witcher 3), use the **Wait Process** picker to select the actual game executable.
+4.  Click **"Generate Command"** and then **"Copy"**.
+5.  In Steam, right-click your game -> **Properties** -> **General** -> **Launch Options**.
+6.  Paste the command (e.g., `"C:\...\LaunchHDR.exe" "MonitorName" -- %command%`).
 
-1.  Double-click **`LaunchHDR.exe`**.
-2.  Type `y` to start the wizard.
-3.  Select your HDR monitor from the list (e.g., type `1`).
-4.  The tool will **automatically copy the correct Launch Option** to your clipboard.
-5.  Paste it into Steam.
+### 2. Epic Games / GOG / Standalone
+For games where you cannot add launch arguments:
 
-### Method 2: The Manual Way
+1.  Open **LaunchHDR** and switch to the **Epic/Standalone** tab.
+2.  Click **"Browse Game Executable..."** and select the game's `.exe` file.
+3.  Click **"Install Wrapper"**.
+    *   *This will rename the original game file (e.g., `Game.exe` -> `Game_Original.exe`) and replace it with LaunchHDR.*
+4.  Launch the game normally through Epic/GOG. LaunchHDR will toggle HDR, then launch the original game.
 
-If you prefer to type it yourself, the syntax for Steam Launch Options is:
-
-```text
-"Path\To\LaunchHDR.exe" "YOUR_MONITOR_NAME" %command%
-```
-
-**Example:**
-
-> `"C:\GamingTools\LaunchHDR.exe" "34M2C6500" %command%`
+*To remove it, simply click **"Uninstall Wrapper"** in the same menu.*
 
 ## Building from Source
 
-You can audit the full source code in [`LaunchHDR.py`](./LaunchHDR.py) and compile it yourself using the included build script.
-
 **Prerequisites:**
+*   [Rust Toolchain](https://rustup.rs/) (stable)
+*   [Inno Setup](https://jrsoftware.org/isinfo.php) (optional, for installer)
 
-  * [Python 3.x](https://www.python.org/downloads/)
-  * PyInstaller (`pip install pyinstaller`)
+**Build:**
+```powershell
+# Clone the repository
+git clone https://github.com/TheBiemGamer/LaunchHDR
+cd LaunchHDR
 
-**How to Build:**
+# Build release binary
+cargo build --release
+```
 
-1.  Open a terminal in the project folder.
-2.  Run the automated build script:
-    ```powershell
-    .\build.bat
-    ```
-3.  The compiled executable will be created in the `dist/` folder.
+The executable will be located in `target/release/LaunchHDR.exe`.
 
-*(Note: The build process automatically bundles the required `HdrSwitcher` tool into the final executable.)*
+## License
 
-## Troubleshooting
-
-  * **HDR doesn't turn on**:
-      * Ensure "Use HDR" is allowed in your Windows Display Settings.
-      * Check that your monitor name in the command matches exactly (use the Wizard to be sure).
-  * **Game doesn't launch**:
-      * Make sure you included `%command%` at the end of the line in Steam.
-
-## Credits & License
-
-**License:**
-This project is licensed under the **MIT License**. See [LICENSE](https://www.google.com/search?q=LICENSE) for details.
-
-**Credits:**
-The HDR switching logic utilizes the **HdrSwitcher** tool created by [Vaiz](https://github.com/Vaiz/HdrSwitcher/).
+This project is licensed under the **MIT License**.

@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "LaunchHDR"
-#define MyAppVersion "0.1.5"
+#define MyAppVersion "0.1.6"
 #define MyAppPublisher "TheBiemGamer"
 #define MyAppURL "https://github.com/TheBiemGamer/LaunchHDR"
 #define MyAppExeName "LaunchHDR.exe"

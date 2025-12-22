@@ -103,6 +103,7 @@ impl MyApp {
                 .repo_owner(REPO_OWNER)
                 .repo_name(REPO_NAME)
                 .bin_name("LaunchHDR")
+                .target("x86_64-pc-windows-msvc")
                 .show_download_progress(true)
                 .current_version(env!("CARGO_PKG_VERSION"))
                 .build();
